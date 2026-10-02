@@ -95,6 +95,35 @@ def command_mortuary_demo() -> int:
     return 0 if case.status_code in {201, 409} and resource.status_code in {201, 409} and cases.status_code == 200 and resources.status_code == 200 else 1
 
 
+def command_relocation_demo() -> int:
+    with TestClient(app) as client:
+        config = client.put("/api/mortuary/relocations/consent-config?actor=cli-admin", json={"rule_type": "unanimous"})
+        right = client.post("/api/mortuary/burial-rights?actor=cli-cemetery", json={
+            "plot_code": "CLI-OLD-01", "holder_name": "演示权属人", "holder_identity": "CLI-HOLDER-01",
+            "starts_on": "2020-01-01", "expires_on": "2040-01-01", "case_id": None,
+        })
+        case = client.post("/api/mortuary/relocations/cases", json={
+            "project_code": "CLI-PARK-2026", "plot_code": "CLI-OLD-01", "created_by": "cli-relocation",
+        })
+        file_status: list[int] = []
+        if case.status_code == 201:
+            case_id = case.json()["id"]
+            for code, kind in (("CLI-PROOF-01", "relationship_proof"), ("CLI-LETTER-01", "consent_letter"),
+                               ("CLI-SITE-01", "site_record"), ("CLI-HAND-01", "handover_receipt"),
+                               ("CLI-DONE-01", "completion_report"), ("CLI-CLOSE-01", "closure_record")):
+                response = client.post(f"/api/mortuary/relocations/cases/{case_id}/files", json={
+                    "kind": kind, "file_code": code, "title": code, "sha256": "0" * 64, "uploaded_by": "cli-staff",
+                })
+                file_status.append(response.status_code)
+        case_id = case.json().get("id")
+    result = {
+        "config": config.status_code, "right": right.status_code, "case": case.status_code,
+        "files": file_status, "case_id": case_id,
+    }
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if config.status_code == 200 and right.status_code in {201, 409} and case.status_code in {201, 409} else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="peaceful-care-operations", description="安宁礼仪与公墓运营服务维护入口")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -103,8 +132,9 @@ def main() -> int:
     subparsers.add_parser("smoke", help="执行本地 API 冒烟检查")
     subparsers.add_parser("compute-demo", help="执行计算任务提交与领取演示")
     subparsers.add_parser("mortuary-demo", help="执行殡葬业务 API 冒烟检查")
+    subparsers.add_parser("relocation-demo", help="执行墓位迁移案件 API 冒烟检查")
     args = parser.parse_args()
-    return {"init-db": command_init, "check-db": command_check, "smoke": command_smoke, "compute-demo": command_compute_demo, "mortuary-demo": command_mortuary_demo}[args.command]()
+    return {"init-db": command_init, "check-db": command_check, "smoke": command_smoke, "compute-demo": command_compute_demo, "mortuary-demo": command_mortuary_demo, "relocation-demo": command_relocation_demo}[args.command]()
 
 
 if __name__ == "__main__":

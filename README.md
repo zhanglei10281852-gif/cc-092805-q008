@@ -14,7 +14,7 @@
 
 ## 初始化与启动
 
-先执行 python -m app.cli init-db 和 python -m app.cli check-db，再用 uvicorn app.main:app --host 0.0.0.0 --port 8432 启动。健康检查为 GET /api/system/health。殡葬业务接口位于 /api/mortuary，涵盖档案、交接、资源、预约、服务订单、墓位权属、账单和时间线。
+先执行 python -m app.cli init-db 和 python -m app.cli check-db，再用 uvicorn app.main:app --host 0.0.0.0 --port 8432 启动。健康检查为 GET /api/system/health。殡葬业务接口位于 /api/mortuary，涵盖档案、交接、资源、预约、服务订单、墓位权属、账单和时间线；园区改造的墓位迁移案件接口位于 /api/mortuary/relocations。
 
 ## 测试与编译检查
 
@@ -22,11 +22,11 @@
 
 编译命令：python -m compileall -q app tests
 
-API 与 CLI 冒烟命令：python -m app.cli smoke、python -m app.cli mortuary-demo
+API 与 CLI 冒烟命令：python -m app.cli smoke、python -m app.cli mortuary-demo、python -m app.cli relocation-demo
 
 ## 目录结构
 
-- app/mortuary：档案、保管交接、资源排程、权属和账单领域
+- app/mortuary：档案、保管交接、资源排程、权属和账单领域；relocation_* 为墓位迁移案件
 - app/api：登录、角色、审计及系统管理接口
 - app/core：时钟、安全、异常、隐私与分页能力
 - app/repositories：通用身份和审计数据访问
@@ -36,3 +36,9 @@ API 与 CLI 冒烟命令：python -m app.cli smoke、python -m app.cli mortuary-
 ## 一致性约定
 
 SQLite 连接启用外键、WAL、忙等待和即时事务。业务档案采用外部编号去重，保管交接与预约保留幂等键，服务订单开票后不可再次开票，支付流水不能重复分配。关键状态变化同时写入领域时间线；会话令牌仅保存摘要，审计记录不会保存明文密码或令牌。
+
+## 墓位迁移案件
+
+迁移案件在申请时冻结权属版本（`right_version` 与 `right_snapshot`/`snapshot_hash`），此后权属续期或变更不会影响案件判断。亲属登记必须挂关系证明文件；亲属意见分为同意、反对和弃权，按全局或项目级同意规则（一致同意、多数、比例阈值、仅权属人）审定，未满足规则则驳回并留痕。司法暂停和亲属身份争议以生效暂停（hold）记录，存在任一暂停时同意审定及新墓位确认、遗骨交接、施工完成、旧墓位关闭全部阻断；暂停解除后可用新的幂等键继续。
+
+新墓位确认 → 遗骨交接 → 施工完成 → 旧墓位关闭必须严格按序发生，各阶段支持幂等重放；已确认新墓位在交接前可通过 site-reset 释放重选，旧墓位关闭时原权属标记为 relocated。撤回审批只改变案件状态，亲属、意见、文件和决定记录全部保留可查。GET 决定详情会展开该决定依赖的亲属、文件与权属版本；POST batch-check 在项目维度识别同一亲属跨案件重复授权、新墓位冲突和仍被暂停阻断的案件。
