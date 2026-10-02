@@ -14,7 +14,11 @@
 
 ## 初始化与启动
 
-先执行 python -m app.cli init-db 和 python -m app.cli check-db，再用 uvicorn app.main:app --host 0.0.0.0 --port 8432 启动。健康检查为 GET /api/system/health。殡葬业务接口位于 /api/mortuary，涵盖档案、交接、资源、预约、服务订单、墓位权属、账单和时间线。
+先执行 python -m app.cli init-db 和 python -m app.cli check-db，再用 uvicorn app.main:app --host 0.0.0.0 --port 8432 启动。健康检查为 GET /api/system/health。殡葬业务接口位于 /api/mortuary，涵盖档案、交接、资源、预约、服务订单、墓位权属、账单和时间线。墓位迁移接口位于 /api/relocation，涵盖同意规则、迁移案件、亲属意见、司法阻断、实施步骤和批量改造筛查。
+
+## 墓位迁移流程
+
+迁移案件在创建时冻结旧墓位的权属版本与快照，此后权属发生续期等变更会阻断评估与实施，需通过 refreeze-right 重新冻结。亲属意见必须附关系证明编号，证明经核验后才计入评估；同一亲属可多次提交，以最新一条为准，历史意见全部保留。同意评估按案件配置的规则（最少同意人数、允许反对人数、是否全体一致）判断，每次评估落一条决定记录，载明依赖的亲属身份、证明文件与权属版本，可通过 /cases/{id}/decisions 查询。司法暂停、身份争议或欠费争议登记为阻断，解除前评估与实施步骤均不可推进。新墓位确认、遗骨交接、施工完成、旧墓位关闭四步严格按序登记，各步携带幂等键，重复提交返回原记录；旧墓位关闭后原权属置为 relocated。撤回案件仅改变状态，已收意见、决定与步骤全部保留。批量改造可将案件加入批次，通过 /batches/{id}/conflicts 识别同一亲属跨案件重复授权与新墓位冲突。
 
 ## 测试与编译检查
 
@@ -27,6 +31,7 @@ API 与 CLI 冒烟命令：python -m app.cli smoke、python -m app.cli mortuary-
 ## 目录结构
 
 - app/mortuary：档案、保管交接、资源排程、权属和账单领域
+- app/relocation：墓位迁移案件、亲属同意、司法阻断与批量改造领域
 - app/api：登录、角色、审计及系统管理接口
 - app/core：时钟、安全、异常、隐私与分页能力
 - app/repositories：通用身份和审计数据访问
